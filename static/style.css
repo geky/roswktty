@@ -137,7 +137,7 @@ h1 {
   border-top: #e15729 solid 10px;
 }
 
-#open, #lights {
+#graph, #open, #lights {
   font: 20px/1.5 sans-serif;
   position: fixed;
   right: 0;
@@ -156,6 +156,12 @@ h1 {
   background: #333;
 }
 
+#graph {
+  right: 145px;
+  top: 10px;
+  background: #333;
+}
+
 #lights {
   font-size: 18px;
   height: 46px;
@@ -163,12 +169,12 @@ h1 {
   background: #555;
 }
 
-#open:hover, #lights:hover {
+#graph:hover, #open:hover, #lights:hover {
   color: slategrey;
   background: white;
 }
 
-#open:active, #lights:active {
+#graph:active, #open:active, #lights:active {
   color: orange;
 }
 

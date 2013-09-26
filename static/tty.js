@@ -14,6 +14,7 @@ var document = this.document
   , root
   , body
   , h1
+  , graph
   , open
   , lights;
 
@@ -70,6 +71,7 @@ tty.open = function() {
     root: document.documentElement,
     body: document.body,
     h1: document.getElementsByTagName('h1')[0],
+    graph: document.getElementById('graph'),
     open: document.getElementById('open'),
     lights: document.getElementById('lights')
   };
@@ -77,8 +79,15 @@ tty.open = function() {
   root = tty.elements.root;
   body = tty.elements.body;
   h1 = tty.elements.h1;
+  graph = tty.elements.graph
   open = tty.elements.open;
   lights = tty.elements.lights;
+
+  if (graph) {
+    on(graph, 'click', function() {
+      new Graph;
+    });
+  }
 
   if (open) {
     on(open, 'click', function() {
@@ -862,6 +871,312 @@ Tab.prototype.setProcessName = function(name) {
     // }
     this.window.title.innerHTML = name;
   }
+};
+
+/**
+ * Graph
+ */
+
+function Graph(socket) {
+  var self = this;
+
+  EventEmitter.call(this);
+
+  var el
+    , grip
+    , bar
+    , button
+    , title
+    , canvas;
+
+  el = document.createElement('div');
+  el.className = 'window';
+
+  grip = document.createElement('div');
+  grip.className = 'grip';
+
+  bar = document.createElement('div');
+  bar.className = 'bar';
+
+  button = document.createElement('div');
+  button.innerHTML = '-';
+  button.title = 'close';
+  button.className = 'tab';
+
+  title = document.createElement('div');
+  title.className = 'title';
+  title.innerHTML = '';
+
+  canvas = document.createElement('canvas');
+  canvas.className = 'terminal';
+
+  this.socket = socket || tty.socket;
+  this.element = el;
+  this.grip = grip;
+  this.bar = bar;
+  this.button = button;
+  this.title = title;
+  this.canvas = canvas;
+
+  this.focused = null;
+
+  this.cols = Terminal.geometry[0];
+  this.rows = Terminal.geometry[1];
+
+  el.appendChild(grip);
+  el.appendChild(bar);
+  el.appendChild(canvas);
+  bar.appendChild(button);
+  bar.appendChild(title);
+  body.appendChild(el);
+
+  tty.windows.push(this);
+
+  this.focus();
+  this.bind();
+}
+
+inherits(Graph, EventEmitter);
+
+Graph.prototype.bind = function() {
+  var self = this
+    , el = this.element
+    , bar = this.bar
+    , grip = this.grip
+    , button = this.button
+    , last = 0;
+
+  on(button, 'click', function(ev) {
+    self.destroy();
+    return cancel(ev);
+  });
+
+  on(grip, 'mousedown', function(ev) {
+    self.focus();
+    self.resizing(ev);
+    return cancel(ev);
+  });
+
+  on(el, 'mousedown', function(ev) {
+    if (ev.target !== el && ev.target !== bar) return;
+
+    self.focus();
+
+    cancel(ev);
+
+    if (new Date - last < 600) {
+      return self.maximize();
+    }
+    last = new Date;
+
+    self.drag(ev);
+
+    return cancel(ev);
+  });
+};
+
+Graph.prototype.focus = function() {
+  // Restack
+  var parent = this.element.parentNode;
+  if (parent) {
+    parent.removeChild(this.element);
+    parent.appendChild(this.element);
+  }
+
+  tty.emit('focus window', this);
+  this.emit('focus');
+};
+
+Graph.prototype.destroy = function() {
+  if (this.destroyed) return;
+  this.destroyed = true;
+
+  if (this.minimize) this.minimize();
+
+  splice(tty.windows, this);
+  if (tty.windows.length) tty.windows[0].focus();
+
+  this.element.parentNode.removeChild(this.element);
+
+  tty.emit('close window', this);
+  this.emit('close');
+};
+
+Graph.prototype.drag = function(ev) {
+  var self = this
+    , el = this.element;
+
+  if (this.minimize) return;
+
+  var drag = {
+    left: el.offsetLeft,
+    top: el.offsetTop,
+    pageX: ev.pageX,
+    pageY: ev.pageY
+  };
+
+  el.style.opacity = '0.60';
+  el.style.cursor = 'move';
+  root.style.cursor = 'move';
+
+  function move(ev) {
+    el.style.left =
+      (drag.left + ev.pageX - drag.pageX) + 'px';
+    el.style.top =
+      (drag.top + ev.pageY - drag.pageY) + 'px';
+  }
+
+  function up() {
+    el.style.opacity = '';
+    el.style.cursor = '';
+    root.style.cursor = '';
+
+    off(document, 'mousemove', move);
+    off(document, 'mouseup', up);
+
+    var ev = {
+      left: el.style.left.replace(/\w+/g, ''),
+      top: el.style.top.replace(/\w+/g, '')
+    };
+
+    tty.emit('drag window', self, ev);
+    self.emit('drag', ev);
+  }
+
+  on(document, 'mousemove', move);
+  on(document, 'mouseup', up);
+};
+
+Graph.prototype.resizing = function(ev) {
+  var self = this
+    , el = this.element
+    , term = this.focused
+    , canvas = this.canvas;
+
+  if (this.minimize) delete this.minimize;
+
+  var resize = {
+    w: el.clientWidth,
+    h: el.clientHeight
+  };
+
+  el.style.overflow = 'hidden';
+  el.style.opacity = '0.70';
+  el.style.cursor = 'se-resize';
+  root.style.cursor = 'se-resize';
+
+  function move(ev) {
+    var x, y;
+    y = el.offsetHeight - canvas.clientHeight;
+    x = ev.pageX - el.offsetLeft;
+    y = (ev.pageY - el.offsetTop) - y;
+    canvas.width = x;
+    canvas.height = y;
+  }
+
+  function up() {
+    var x, y;
+
+    x = canvas.width;
+    y = canvas.height;
+
+    self.resize(x, y);
+
+    el.style.width = '';
+    el.style.height = '';
+
+    el.style.overflow = '';
+    el.style.opacity = '';
+    el.style.cursor = '';
+    root.style.cursor = '';
+
+    off(document, 'mousemove', move);
+    off(document, 'mouseup', up);
+  }
+
+  on(document, 'mousemove', move);
+  on(document, 'mouseup', up);
+};
+
+Graph.prototype.maximize = function() {
+  if (this.minimize) return this.minimize();
+
+  var self = this
+    , el = this.element
+    , term = this.focused
+    , x
+    , y;
+
+  var m = {
+    cols: term.cols,
+    rows: term.rows,
+    left: el.offsetLeft,
+    top: el.offsetTop,
+    root: root.className
+  };
+
+  this.minimize = function() {
+    delete this.minimize;
+
+    el.style.left = m.left + 'px';
+    el.style.top = m.top + 'px';
+    el.style.width = '';
+    el.style.height = '';
+    term.element.style.width = '';
+    term.element.style.height = '';
+    el.style.boxSizing = '';
+    self.grip.style.display = '';
+    root.className = m.root;
+
+    self.resize(m.cols, m.rows);
+
+    tty.emit('minimize window', self);
+    self.emit('minimize');
+  };
+
+  window.scrollTo(0, 0);
+
+  x = root.clientWidth / term.element.offsetWidth;
+  y = root.clientHeight / term.element.offsetHeight;
+  x = (x * term.cols) | 0;
+  y = (y * term.rows) | 0;
+
+  el.style.left = '0px';
+  el.style.top = '0px';
+  el.style.width = '100%';
+  el.style.height = '100%';
+  term.element.style.width = '100%';
+  term.element.style.height = '100%';
+  el.style.boxSizing = 'border-box';
+  this.grip.style.display = 'none';
+  root.className = 'maximized';
+
+  this.resize(x, y);
+
+  tty.emit('maximize window', this);
+  this.emit('maximize');
+};
+
+Graph.prototype.resize = function(cols, rows) {
+  this.cols = cols;
+  this.rows = rows;
+
+  this.canvas.width = this.cols;
+  this.canvas.height = this.rows;
+
+  tty.emit('resize window', this, cols, rows);
+  this.emit('resize', cols, rows);
+};
+
+Graph.prototype.highlight = function() {
+  var self = this;
+
+  this.element.style.borderColor = 'orange';
+  setTimeout(function() {
+    self.element.style.borderColor = '';
+  }, 200);
+
+  this.focus();
 };
 
 /**
