@@ -76,6 +76,17 @@ body {
 .maximized .bar {
 }
 
+.input {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  font-family: "DejaVu Sans Mono", "Liberation Mono", monospace;
+  color: #fafafa;
+  background: #272829;
+  border: 0px solid;
+}
+
 .title {
   position: absolute;
   right: 5px;

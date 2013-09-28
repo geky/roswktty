@@ -85,7 +85,7 @@ tty.open = function() {
 
   if (graph) {
     on(graph, 'click', function() {
-      new Graph;
+      new Plot;
     });
   }
 
@@ -874,10 +874,10 @@ Tab.prototype.setProcessName = function(name) {
 };
 
 /**
- * Graph
+ * Plot
  */
 
-function Graph(socket) {
+function Plot(socket) {
   var self = this;
 
   EventEmitter.call(this);
@@ -887,7 +887,10 @@ function Graph(socket) {
     , bar
     , button
     , title
-    , canvas;
+    , canvas
+    , form
+    , input
+    , rp;
 
   el = document.createElement('div');
   el.className = 'window';
@@ -909,6 +912,22 @@ function Graph(socket) {
 
   canvas = document.createElement('canvas');
   canvas.className = 'terminal';
+  canvas.style['margin-bottom'] = '18px';
+
+  rp = new ROSPlot(canvas.getContext('2d'),
+                   canvas.width, canvas.height);
+
+  console.log(rp);
+
+  form = document.createElement('form');
+  form.onsubmit = function(ev) {
+    rp.cmd(ev.target[0].value);
+    return false;
+  }
+
+  input = document.createElement('input');
+  input.className = 'input';
+  input.focus();
 
   this.socket = socket || tty.socket;
   this.element = el;
@@ -917,6 +936,7 @@ function Graph(socket) {
   this.button = button;
   this.title = title;
   this.canvas = canvas;
+  this.input = input;
 
   this.focused = null;
 
@@ -926,19 +946,25 @@ function Graph(socket) {
   el.appendChild(grip);
   el.appendChild(bar);
   el.appendChild(canvas);
+  el.appendChild(form);
   bar.appendChild(button);
   bar.appendChild(title);
   body.appendChild(el);
+  form.appendChild(input);
+
+  this.rp = rp;
 
   tty.windows.push(this);
 
   this.focus();
   this.bind();
+
+  input.focus();
 }
 
-inherits(Graph, EventEmitter);
+inherits(Plot, EventEmitter);
 
-Graph.prototype.bind = function() {
+Plot.prototype.bind = function() {
   var self = this
     , el = this.element
     , bar = this.bar
@@ -975,7 +1001,7 @@ Graph.prototype.bind = function() {
   });
 };
 
-Graph.prototype.focus = function() {
+Plot.prototype.focus = function() {
   // Restack
   var parent = this.element.parentNode;
   if (parent) {
@@ -987,7 +1013,7 @@ Graph.prototype.focus = function() {
   this.emit('focus');
 };
 
-Graph.prototype.destroy = function() {
+Plot.prototype.destroy = function() {
   if (this.destroyed) return;
   this.destroyed = true;
 
@@ -1002,7 +1028,7 @@ Graph.prototype.destroy = function() {
   this.emit('close');
 };
 
-Graph.prototype.drag = function(ev) {
+Plot.prototype.drag = function(ev) {
   var self = this
     , el = this.element;
 
@@ -1047,7 +1073,7 @@ Graph.prototype.drag = function(ev) {
   on(document, 'mouseup', up);
 };
 
-Graph.prototype.resizing = function(ev) {
+Plot.prototype.resizing = function(ev) {
   var self = this
     , el = this.element
     , term = this.focused
@@ -1098,18 +1124,19 @@ Graph.prototype.resizing = function(ev) {
   on(document, 'mouseup', up);
 };
 
-Graph.prototype.maximize = function() {
+Plot.prototype.maximize = function() {
   if (this.minimize) return this.minimize();
 
   var self = this
     , el = this.element
     , term = this.focused
     , x
-    , y;
+    , y
+    , canvas = this.canvas;
 
   var m = {
-    cols: term.cols,
-    rows: term.rows,
+    cols: canvas.width,
+    rows: canvas.height,
     left: el.offsetLeft,
     top: el.offsetTop,
     root: root.className
@@ -1122,8 +1149,6 @@ Graph.prototype.maximize = function() {
     el.style.top = m.top + 'px';
     el.style.width = '';
     el.style.height = '';
-    term.element.style.width = '';
-    term.element.style.height = '';
     el.style.boxSizing = '';
     self.grip.style.display = '';
     root.className = m.root;
@@ -1136,17 +1161,13 @@ Graph.prototype.maximize = function() {
 
   window.scrollTo(0, 0);
 
-  x = root.clientWidth / term.element.offsetWidth;
-  y = root.clientHeight / term.element.offsetHeight;
-  x = (x * term.cols) | 0;
-  y = (y * term.rows) | 0;
+  x = root.clientWidth;
+  y = root.clientHeight;
 
   el.style.left = '0px';
   el.style.top = '0px';
   el.style.width = '100%';
   el.style.height = '100%';
-  term.element.style.width = '100%';
-  term.element.style.height = '100%';
   el.style.boxSizing = 'border-box';
   this.grip.style.display = 'none';
   root.className = 'maximized';
@@ -1157,7 +1178,7 @@ Graph.prototype.maximize = function() {
   this.emit('maximize');
 };
 
-Graph.prototype.resize = function(cols, rows) {
+Plot.prototype.resize = function(cols, rows) {
   this.cols = cols;
   this.rows = rows;
 
@@ -1168,7 +1189,7 @@ Graph.prototype.resize = function(cols, rows) {
   this.emit('resize', cols, rows);
 };
 
-Graph.prototype.highlight = function() {
+Plot.prototype.highlight = function() {
   var self = this;
 
   this.element.style.borderColor = 'orange';
