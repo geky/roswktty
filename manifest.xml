@@ -1,0 +1,11 @@
+<package>
+  <description brief="ros_tty_js">
+     ROS and a Terminal for your browser
+  </description>
+  <author>Christopher Haster</author>
+  <license>MIT</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://github.com/geky/ros_tty_js</url>
+</package>
+
+
