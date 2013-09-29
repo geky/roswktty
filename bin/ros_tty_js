@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-process.title = 'tty.js';
+process.title = 'ros_tty_js';
 
 var tty = require('../');
 

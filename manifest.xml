@@ -6,6 +6,8 @@
   <license>MIT</license>
   <review status="unreviewed" notes=""/>
   <url>http://github.com/geky/ros_tty_js</url>
+
+  <depends package="rosbridge_suite" />
 </package>
 
 
