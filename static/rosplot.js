@@ -83,6 +83,8 @@ var ROSPlot = (function() {
         });
 
         var draw = function() {
+          if (!ctx) return;
+
           if (!image || image.width * image.height <= 0) {
             ctx.fillStyle = '#f0f0f0';
             ctx.font = '12px monospace';
@@ -91,7 +93,7 @@ var ROSPlot = (function() {
             ctx.drawImage(image, 0, 0, width, height);
           }
 
-          if (ctx) animate(draw);
+          animate(draw);
         }
 
         this.defered.push(function() {

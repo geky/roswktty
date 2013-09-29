@@ -911,6 +911,8 @@ function Plot(socket) {
   title.innerHTML = '';
 
   canvas = document.createElement('canvas');
+  canvas.width = 400;
+  canvas.height = 250;
   canvas.className = 'terminal';
   canvas.style['margin-bottom'] = '18px';
 
@@ -1021,6 +1023,8 @@ Plot.prototype.focus = function() {
 Plot.prototype.destroy = function() {
   if (this.destroyed) return;
   this.destroyed = true;
+
+  this.rp.clean();
 
   if (this.minimize) this.minimize();
 
