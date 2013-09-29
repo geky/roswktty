@@ -921,7 +921,8 @@ function Plot(socket) {
 
   form = document.createElement('form');
   form.onsubmit = function(ev) {
-    rp.cmd(ev.target[0].value);
+    rp.command(ev.target[0].value);
+    ev.target[0].value = '';
     return false;
   }
 
@@ -1184,6 +1185,8 @@ Plot.prototype.resize = function(cols, rows) {
 
   this.canvas.width = this.cols;
   this.canvas.height = this.rows;
+
+  this.rp.render()
 
   tty.emit('resize window', this, cols, rows);
   this.emit('resize', cols, rows);
