@@ -8,6 +8,7 @@
   <url>http://github.com/geky/ros_tty_js</url>
 
   <depends package="rosbridge_suite" />
+  <depends package="mjpeg_server" />
 </package>
 
 

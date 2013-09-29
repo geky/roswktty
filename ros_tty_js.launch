@@ -1,15 +1,22 @@
 <launch>
   <!-- only arguments exposed are for port assignment -->
-  <!-- currently bridge_port is hardcoded into static/rosplot.js -->
-  <arg name="port" default="9000" />
-  <arg name="bridge_port" value="9001" />
+  <!-- currently bridge_port and mjpeg_port are hardcoded
+       into static/rosplot.js -->
+  <arg name="port" default="9000"/>
+  <arg name="bridge_port" value="9001"/>
+  <arg name="mjpeg_port" value="9002"/>
 
   <!-- run rosbridge for connecting to ros -->
-  <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" > 
-     <arg name="port" value="$(arg bridge_port)"/>
+  <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch">
+    <arg name="port" value="$(arg bridge_port)"/>
   </include>
 
+  <!-- run mjpeg_server for video streams -->
+  <node pkg="mjpeg_server" type="mjpeg_server" name="mjpeg_server">
+    <param name="_port" value="$(arg mjpeg_port)"/>
+  </node>
+
   <!-- run the actual ros_tty_js server for connections -->
-  <node pkg="ros_tty_js" type="ros_tty_js" name="ros_tty_js" 
-        args="--port $(arg port) " />
+  <node pkg="ros_tty_js" type="ros_tty_js" name="ros_tty_js"
+        args="--port $(arg port) "/>
 </launch>

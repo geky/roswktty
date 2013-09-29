@@ -914,15 +914,19 @@ function Plot(socket) {
   canvas.className = 'terminal';
   canvas.style['margin-bottom'] = '18px';
 
-  rp = new ROSPlot(canvas.getContext('2d'),
-                   canvas.width, canvas.height);
-
-  console.log(rp);
+  rp = new ROSPlot(canvas, function(value) { 
+    title.innerHTML = value;
+  });
 
   form = document.createElement('form');
   form.onsubmit = function(ev) {
-    rp.command(ev.target[0].value);
-    ev.target[0].value = '';
+    try {
+      rp.command(ev.target[0].value);
+      ev.target[0].value = '';
+    } catch (err) {
+      console.log(err);
+    }
+
     return false;
   }
 
