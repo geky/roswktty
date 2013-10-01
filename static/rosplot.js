@@ -10,10 +10,14 @@ var ROSPlot = (function() {
 
   var mjpeg = 'http://' + window.location.hostname + ':9002/stream';
 
-
   var time = function() {
     return new Date().getTime();
   };
+
+  var colors = ["#2e3436", "#cc0000", "#4e9a06", "#c4a000",
+                "#3465a4", "#75507b", "#06989a", "#d3d7cf",
+                "#555753", "#ef2929", "#8ae234", "#fce94f",
+                "#729fcf", "#ad7fa8", "#34e2e2", "#eeeeec"]
 
 
   // Possible commands
@@ -48,30 +52,61 @@ var ROSPlot = (function() {
         if (input.length <= 1) return;
 
         var topics = [];
+        var buffer = 5;
 
         for (var i = 1; i < input.length; i++) {
           topics[i-1] = {
-            topic: input[i],
-            color: '#ae3030',
+            name: input[i],
+            color: colors[i % colors.length],
             times: [],
-            values: []
-          };
+            values: [],
+
+            topic: new ROSLIB.Topic({
+              ros: ros,
+              name: input[i]
+            })
+          }
         }
 
-        var buffer = 5;
-
         if (topics.length > 1) {
-          this.title(topics[0].topic + '...');
+          this.title(topics[0].name + '...');
         } else {
-          this.title(topics[0].topic);
+          this.title(topics[0].name);
         }
 
         var draw = function(ctx) {
           var off = 3;
-          var min_y = off;
-          var max_y = this.height - off;
-          var min_x = off;
-          var max_x = this.width - off*9;
+          var min_y = 1;
+          var max_y = this.height - 1;
+          var min_x = 1;
+          var max_x = this.width - 27;
+
+          var max_value = -Infinity;
+          var min_value = +Infinity;
+          var max_time = time();
+          var min_time = max_time - buffer*1000;
+
+          var x, y;
+
+          for (var i = 0; i < topics.length; i++) {
+            for (var ii = 0; ii < topics[i].values.length; ii++) {
+              var value = topics[i].values[ii];
+
+              if (value > max_value) {
+                max_value = value;
+              }
+
+              if (value < min_value) {
+                min_value = value;
+              }
+
+              if (topics[i].times[ii] < min_time) {
+                topics[ii].times.shift();
+                topics[ii].values.shift();
+                ii--;
+              }
+            }
+          }
 
           ctx.lineWidth = 2;
           ctx.strokeStyle = '#555';
@@ -81,29 +116,85 @@ var ROSPlot = (function() {
           ctx.moveTo(min_x-off, max_y);
           ctx.lineTo(max_x+off, max_y);
 
-          var y = ~~((max_y-min_y)/2 + min_y);
+          y = ~~((max_y-min_y)/2 + min_y);
           ctx.moveTo(max_x-off, min_y);
           ctx.lineTo(max_x+off, min_y);
           ctx.moveTo(max_x-off, y);
           ctx.lineTo(max_x+off, y);
 
           for (var i = 0; i < buffer; i++) {
-            var x = ~~((max_x-min_x) * (i/buffer) + min_x);
+            x = ~~((max_x-min_x) * (i/buffer) + min_x);
             ctx.moveTo(x, max_y-off);
             ctx.lineTo(x, max_y+off);
           }
 
           ctx.stroke();
 
+          x = (max_value-min_value)/2 + min_value;
           ctx.fillStyle = '#f0f0f0';
           ctx.font = '9px monospace';
-          ctx.fillText(0+'', max_x+2*off, max_y+off);
-          ctx.fillText(0.02 + '', max_x+2*off, y+off);
-          ctx.fillText(2.74839+'', max_x+2*off, min_y+off);
+          ctx.fillText(''+min_value, max_x+2*off, max_y);
+          ctx.fillText(''+x, max_x+2*off, y+off);
+          ctx.fillText(''+max_value, max_x+2*off, min_y+2*off);
+
+          for (var i = 0; i < topics.length; i++) {
+            ctx.strokeStyle = topics[i].color;
+            ctx.beginPath();
+
+            var prev_time = min_time;
+
+            for (var ii = 0; ii < topics[i].values.length; ii++) {
+              var v = topics[i].values[ii];
+              var t = topics[i].times[ii];
+
+              var count = 0;
+              for (var iii = ii; iii < topics[i].values.length; iii++) { 
+                if (topics[i].times[iii] == t) {
+                  count++;
+                } else {
+                  break;
+                }
+              }
+
+              t -= (t-prev_time) * (count-1) / count;
+              prev_time = t;
+
+              v = (v-min_value) / (max_value-min_value);
+              t = (t-min_time) / (max_time-min_time);
+
+              x = (t*(max_x - min_x))+min_x;
+              y = ((1-v)*(max_y - min_y))+min_y;
+
+              if (ii == 0) {
+                ctx.moveTo(x, y);
+              } else {
+                ctx.lineTo(x, y);
+              }
+            }
+
+            ctx.stroke();
+            
+            ctx.fillStyle = topics[i].color;
+            ctx.font = '12px monospace';
+            ctx.fillText(topics[i].name, min_x, (i+1)*9 + min_y);
+          }
         }
 
-        this.animate(draw);
         this.plot(draw);
+        this.animate(draw);
+
+        for (var i = 0; i < topics.length; i++) {
+          var topic = topics[i];
+
+          topic.topic.subscribe(function(data) {
+            topic.times.push(time());
+            topic.values.push(data.angular.z);
+          });
+
+          this.defered.push(function() {
+            topic.topic.unsubscribe();
+          });
+        }
       }
     },
 

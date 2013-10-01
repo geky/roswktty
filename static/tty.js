@@ -914,7 +914,6 @@ function Plot(socket) {
   canvas.width = 400;
   canvas.height = 250;
   canvas.className = 'terminal';
-  canvas.style['margin-bottom'] = '18px';
 
   rp = new ROSPlot(canvas, function(value) { 
     title.innerHTML = value;

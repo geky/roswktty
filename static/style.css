@@ -30,6 +30,11 @@ body {
   margin: 25px;
 }
 
+canvas {
+  border-width: 0px;
+  margin-bottom: 18px;
+}
+
 /* Only allow plaintext?
 [contenteditable=""],
 [contenteditable="true"] {
