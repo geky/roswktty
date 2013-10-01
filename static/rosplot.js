@@ -69,7 +69,7 @@ var ROSPlot = (function() {
         }
 
         if (topics.length > 1) {
-          this.title(topics[0].name + '...');
+          this.title(topics[0].name + ', ...');
         } else {
           this.title(topics[0].name);
         }
@@ -84,13 +84,27 @@ var ROSPlot = (function() {
           var max_value = -Infinity;
           var min_value = +Infinity;
           var max_time = time();
-          var min_time = max_time - buffer*1000;
+          var min_time = max_time - (buffer)*1000;
 
           var x, y;
 
           for (var i = 0; i < topics.length; i++) {
-            for (var ii = 0; ii < topics[i].values.length; ii++) {
-              var value = topics[i].values[ii];
+            var topic = topics[i];
+
+            while (topic.times.length > 0 && 
+                   topic.times[0] < min_time-1000) {
+              topic.times.shift();
+              topic.values.shift();
+            }
+
+            while (topic.times.length > 1 && 
+                   topic.times[0] == topic.times[1]) {
+              topic.times.shift();
+              topic.values.shift();
+            } 
+
+            for (var ii = 0; ii < topic.values.length; ii++) {
+              var value = topic.values[ii];
 
               if (value > max_value) {
                 max_value = value;
@@ -99,13 +113,12 @@ var ROSPlot = (function() {
               if (value < min_value) {
                 min_value = value;
               }
-
-              if (topics[i].times[ii] < min_time) {
-                topics[ii].times.shift();
-                topics[ii].values.shift();
-                ii--;
-              }
             }
+          }
+
+          if (min_value == max_value) {
+            max_value += 0.00001;
+            min_value -= 0.00001;
           }
 
           ctx.lineWidth = 2;
@@ -133,9 +146,12 @@ var ROSPlot = (function() {
           x = (max_value-min_value)/2 + min_value;
           ctx.fillStyle = '#f0f0f0';
           ctx.font = '9px monospace';
-          ctx.fillText(''+min_value, max_x+2*off, max_y);
-          ctx.fillText(''+x, max_x+2*off, y+off);
-          ctx.fillText(''+max_value, max_x+2*off, min_y+2*off);
+          ctx.fillText(String(min_value).substring(0,4), 
+                       max_x+2*off, max_y);
+          ctx.fillText(String(x).substring(0,4), 
+                       max_x+2*off, y+off);
+          ctx.fillText(String(max_value).substring(0,4), 
+                       max_x+2*off, min_y+2*off);
 
           for (var i = 0; i < topics.length; i++) {
             ctx.strokeStyle = topics[i].color;
