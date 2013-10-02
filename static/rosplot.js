@@ -4,20 +4,111 @@
  */
 
 var ROSPlot = (function() {
-  var ros = new ROSLIB.Ros({
-    url: 'ws://' + window.location.hostname + ':9001'
-  });
+  var ros = {
+    ros: new ROSLIB.Ros({
+      url: 'ws://' + window.location.hostname + ':9001'
+    }),
 
-  var mjpeg = 'http://' + window.location.hostname + ':9002/stream';
+    mjpeg: function(topic, width, height) {
+      var url = 'http://' + window.location.hostname + ':9002/stream';
+      if (topic) url += '?topic=' + topic;
+      if (width) url += '?width=' + width;
+      if (height) url += '?height=' + height;
+      return url;
+    },
 
-  var time = function() {
-    return new Date().getTime();
-  };
+    time: function() {
+      return new Date().getTime();
+    },
+
+    subscribe: function(name, cb) {
+      var topics = this.topics;
+      var ros = this.ros;
+
+      if (name.length < 1) return;
+      if (name[0] != '/') name = '/' + name;
+
+      var ref = {
+        name: name,
+        fields: [],
+        cb: cb
+      }
+
+      ros.getTopics(function(names) {
+        var name = ''
+
+        for (var i = 0; i < names.length; i++) {
+          var m = ref.name.match(names[i]);
+
+          if (m && m[0].length > name.length) {
+            name = m[0];
+          }
+        }
+
+        ref.fields = ref.name.substring(name.length+1)
+        if (ref.fields.length == 0) {
+          ref.fields = [];
+        } else {
+          ref.fields = ref.fields.split('/');
+        }
+
+        ref.name = name;
+
+        var topic = topics[name];
+
+        if (topic) {
+          topic.refs.push(ref);
+          return;
+        }
+
+        topic = {
+          topic: new ROSLIB.Topic({
+            ros: ros,
+            name: name,
+          }),
+          refs: [ref],
+        }
+
+        console.log('subscribed: ' + name);
+        topic.topic.subscribe(function(data) {
+          for (var i = 0; i < topic.refs.length; i++) {
+            var ref = topic.refs[i];
+
+            var field = data;
+            for (var ii = 0; ii < ref.fields.length; ii++) {
+              field = field[ref.fields[ii]];
+            }
+
+            ref.cb(field);
+          }
+        });
+
+        topics[name] = topic;
+      });
+
+      return ref;
+    },
+
+    unsubscribe: function(ref) {
+      var topic = this.topics[ref.name];
+
+      var ind = topic.refs.indexOf(ref);
+      topic.refs.splice(ind, 1);
+
+      if (topic.refs.length == 0) {
+        console.log('unsubscribed: ' + ref.name);
+        topic.topic.unsubscribe();
+        delete this.topics[ref.name];
+      }
+    },
+
+    topics: {},
+  }
 
   var colors = ["#2e3436", "#cc0000", "#4e9a06", "#c4a000",
                 "#3465a4", "#75507b", "#06989a", "#d3d7cf",
                 "#555753", "#ef2929", "#8ae234", "#fce94f",
-                "#729fcf", "#ad7fa8", "#34e2e2", "#eeeeec"]
+                "#729fcf", "#ad7fa8", "#34e2e2", "#eeeeec"];
 
 
   // Possible commands
@@ -60,19 +151,10 @@ var ROSPlot = (function() {
             color: colors[i % colors.length],
             times: [],
             values: [],
-
-            topic: new ROSLIB.Topic({
-              ros: ros,
-              name: input[i]
-            })
           }
         }
 
-        if (topics.length > 1) {
-          this.title(topics[0].name + ', ...');
-        } else {
-          this.title(topics[0].name);
-        }
+        this.title(topics[0].name);
 
         var draw = function(ctx) {
           var off = 3;
@@ -83,7 +165,7 @@ var ROSPlot = (function() {
 
           var max_value = -Infinity;
           var min_value = +Infinity;
-          var max_time = time();
+          var max_time = ros.time();
           var min_time = max_time - (buffer)*1000;
 
           var x, y;
@@ -192,7 +274,7 @@ var ROSPlot = (function() {
             
             ctx.fillStyle = topics[i].color;
             ctx.font = '12px monospace';
-            ctx.fillText(topics[i].name, min_x, (i+1)*9 + min_y);
+            ctx.fillText(topics[i].name, min_x, (i+1)*12 + min_y);
           }
         }
 
@@ -200,16 +282,16 @@ var ROSPlot = (function() {
         this.animate(draw);
 
         for (var i = 0; i < topics.length; i++) {
-          var topic = topics[i];
+          var ref;
 
-          topic.topic.subscribe(function(data) {
-            topic.times.push(time());
-            topic.values.push(data.angular.z);
-          });
+          (function(topic) {
+            ref = ros.subscribe(topic.name, function(data) {
+              topic.times.push(ros.time());
+              topic.values.push(data);
+            })
+          })(topics[i]);
 
-          this.defered.push(function() {
-            topic.topic.unsubscribe();
-          });
+          this.topics.push(ref);
         }
       }
     },
@@ -230,11 +312,7 @@ var ROSPlot = (function() {
         this.title(topic);
 
         this.plot(function(ctx) {
-          var src = mjpeg;
-          src += '?topic=' + topic;
-          src += '?width=' + this.width;
-          src += '?height=' + this.height;
-          image.src = src;
+          image.src = ros.mjpeg(topic, this.width, this.height);
         });
 
         this.animate(function(ctx) {
@@ -258,7 +336,7 @@ var ROSPlot = (function() {
     this.height = canvas.height;
     this.title = title || function() {};
 
-    this.defered = [];
+    this.topics = [];
 
     this.command('help');
   }
@@ -291,13 +369,11 @@ var ROSPlot = (function() {
   }
 
   ROSPlot.prototype.clean = function() {
-    for (var i=0; i < this.defered.length; i++) {
-      this._defd = this.defered[i];
-      this._defd();
-      delete this._defd;
+    for (var i=0; i < this.topics.length; i++) {
+      ros.unsubscribe(this.topics[i]);
     }
 
-    this.defered = [];
+    this.topics = [];
 
     delete this._plot;
     delete this._cmd;
