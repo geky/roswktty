@@ -16,7 +16,7 @@
     <param name="_port" value="$(arg mjpeg_port)"/>
   </node>
 
-  <!-- run the actual ros_tty_js server for connections -->
-  <node pkg="ros_tty_js" type="ros_tty_js" name="ros_tty_js"
+  <!-- run the actual roswebkit server for connections -->
+  <node pkg="roswebkit" type="roswebkit" name="roswebkit"
         args="--port $(arg port) "/>
 </launch>

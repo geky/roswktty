@@ -1,11 +1,11 @@
 <package>
-  <description brief="ros_tty_js">
-     ROS and a Terminal for your browser
+  <description brief="roswebkit">
+     ROS plotting, image streaming, and a Terminal for your browser
   </description>
   <author>Christopher Haster</author>
   <license>MIT</license>
   <review status="unreviewed" notes=""/>
-  <url>http://github.com/geky/ros_tty_js</url>
+  <url>http://github.com/geky/roswebkit</url>
 
   <depends package="rosbridge_suite" />
   <depends package="mjpeg_server" />
