@@ -3,158 +3,197 @@
  * Copyright (c) 2013-2014, Christopher Haster (MIT License)
  */
 
-var ROSPlot = (function() {
-  var ros = {
-    ros: new ROSLIB.Ros({
-      url: 'ws://' + window.location.hostname + ':9001'
-    }),
+ROSManager = (function() {
+  var bridge_port = 9001;
+  var mjpeg_port = 9002;
 
-    mjpeg: function(topic, width, height) {
-      var url = 'http://' + window.location.hostname + ':9002/stream';
-      if (topic) url += '?topic=' + topic;
-      if (width) url += '?width=' + width;
-      if (height) url += '?height=' + height;
-      return url;
-    },
+  function ROSManager() {
+    this.ros = new ROSLIB.Ros({
+      url: 'ws://' + window.location.hostname + ':' + bridge_port
+    });
 
-    time: function() {
-      return new Date().getTime();
-    },
-
-    subscribe: function(name, cb) {
-      var topics = this.topics;
-      var ros = this.ros;
-
-      if (name.length < 1) return;
-      if (name[0] != '/') name = '/' + name;
-
-      var ref = {
-        name: name,
-        fields: [],
-        cb: cb
-      }
-
-      ros.getTopics(function(names) {
-        var name = ''
-
-        for (var i = 0; i < names.length; i++) {
-          var m = ref.name.match(names[i]);
-
-          if (m && m[0].length > name.length) {
-            name = m[0];
-          }
-        }
-
-        ref.fields = ref.name.substring(name.length+1)
-        if (ref.fields.length == 0) {
-          ref.fields = [];
-        } else {
-          ref.fields = ref.fields.split('/');
-        }
-
-        ref.name = name;
-
-        var topic = topics[name];
-
-        if (topic) {
-          topic.refs.push(ref);
-          return;
-        }
-
-        topic = {
-          topic: new ROSLIB.Topic({
-            ros: ros,
-            name: name,
-          }),
-          refs: [ref],
-        }
-
-        console.log('subscribed: ' + name);
-        topic.topic.subscribe(function(data) {
-          for (var i = 0; i < topic.refs.length; i++) {
-            var ref = topic.refs[i];
-
-            var field = data;
-            for (var ii = 0; ii < ref.fields.length; ii++) {
-              field = field[ref.fields[ii]];
-            }
-
-            ref.cb(field);
-          }
-        });
-
-        topics[name] = topic;
-      });
-
-      return ref;
-    },
-
-    unsubscribe: function(ref) {
-      var topic = this.topics[ref.name];
-
-      var ind = topic.refs.indexOf(ref);
-      topic.refs.splice(ind, 1);
-
-      if (topic.refs.length == 0) {
-        console.log('unsubscribed: ' + ref.name);
-        topic.topic.unsubscribe();
-        delete this.topics[ref.name];
-      }
-    },
-
-    topics: {},
+    this.topics = []
   }
 
-  var colors = ["#2e3436", "#cc0000", "#4e9a06", "#c4a000",
-                "#3465a4", "#75507b", "#06989a", "#d3d7cf",
-                "#555753", "#ef2929", "#8ae234", "#fce94f",
-                "#729fcf", "#ad7fa8", "#34e2e2", "#eeeeec"];
+  ROSManager.prototype.mjpeg = function(topic, width, height) {
+    var url = 'http://' + window.location.hostname 
+    url += ':' + mjpeg_port + '/stream';
+
+    if (topic) url += '?topic=' + topic;
+    if (width) url += '?width=' + width;
+    if (height) url += '?height=' + height;
+    return url;
+  }
+
+  ROSManager.prototype.time = function() {
+    return new Date().getTime();
+  }
+
+  ROSManager.prototype.subscribe = function(name, cb) {
+    if (name.length < 1) return;
+    if (name[0] != '/') name = '/' + name;
+
+    var ref = { cb: cb };
+
+    ref.name = name.match('[a-zA-Z0-9_/]*');
+    if (ref.name) {
+      ref.name = ref.name[0];
+    } else {
+      ref.name = '';
+    }
+
+    ref.field = name.substring(ref.name.length);
+    ref.parse = Function('d', 'return d' + ref.field);
 
 
-  // Possible commands
+    var topic = this.topics[ref.name];
+
+    if (topic) {
+      topic.refs.push(ref);
+      return ref;
+    }
+
+    topic = {
+      topic: new ROSLIB.Topic({
+        ros: this.ros,
+        name: ref.name,
+      }),
+      refs: [ref],
+    }
+
+    console.log('subscribed: ' + ref.name);
+    topic.topic.subscribe(function(data) {
+      for (var i = 0; i < topic.refs.length; i++) {
+        topic.refs[i].cb(topic.refs[i].parse(data));
+      }
+    });
+
+    this.topics[ref.name] = topic;
+    return ref;
+  }
+
+  ROSManager.prototype.unsubscribe = function(ref) {
+    var topic = this.topics[ref.name];
+
+    var ind = topic.refs.indexOf(ref);
+    topic.refs.splice(ind, 1);
+
+    if (topic.refs.length == 0) {
+      console.log('unsubscribed: ' + ref.name);
+      topic.topic.unsubscribe();
+      delete this.topics[ref.name];
+    }
+  }
+
+  return ROSManager;
+})();
+
+var ros = new ROSManager();
+
+
+var ROSPlot = (function() {
+
+  var colors = ["#cc0000", "#4e9a06", "#c4a000", "#3465a4", 
+                "#75507b", "#06989a", "#d3d7cf", "#555753", 
+                "#ef2929", "#8ae234", "#fce94f", "#729fcf", 
+                "#ad7fa8", "#34e2e2", "#eeeeec"];
+
+
   var cmds = {
     help: {
       help: 'shows basic commands',
 
-      cmd: function() {
+      cmd: function(input) {
         this.title('');
+        this.paramize();
 
-        this.plot(function(ctx) {
-          ctx.fillStyle = '#f0f0f0'
-          ctx.font = '12px monospace';
+        if (input.length == 1) {
+          this.plot(function(ctx) {
+            ctx.fillStyle = '#f0f0f0'
+            ctx.font = '12px monospace';
 
-          var y = 12;
-          ctx.fillText('Commands:', 0, y);
+            var y = 12;
+            ctx.fillText('Commands:', 0, y);
 
-          for (var cmd in cmds) {
-            ctx.fillText(cmd + ' - ' + cmds[cmd].help, 12, y += 12);
-          }
+            for (var cmd in cmds) {
+              ctx.fillText(cmd + ' - ' + cmds[cmd].help, 12, y += 12);
+            }
 
-          ctx.fillText('Params can be specified like so:', 0, y += 24);
-          ctx.fillText('/name/space/topic.param', 12, y += 12);
-        });
+            ctx.fillText('Fields can be specified like so:', 0, y += 24);
+            ctx.fillText('/name/space/topic.field', 12, y += 12);
+          });
+        } else {
+          this.plot(function(ctx) {
+            ctx.fillStyle = '#f0f0f0'
+            ctx.font = '12px monospace';
+
+            var y = 12;
+            ctx.fillText('Command ' + input[1] + ':', 0, y);
+
+            var cmd = cmds[input[1]];
+            ctx.fillText(cmd.help, 12, y += 12);
+
+            if (cmd.params) {
+              ctx.fillText('Params: ', 0, y += 24);
+              for (var param in cmd.params) {
+                ctx.fillText(param, 12, y += 12);
+              }
+            }
+          });
+        }
+      }
+    },
+
+    set: {
+      help: 'sets plot parameters',
+
+      cmd: function(input) {
+        if (input.length <= 2) return;
+
+        this.param[input[1]] = eval(input[2]);
       }
     },
 
     plot: {
-      help: 'plots params against time',
+      help: 'plots fields against time',
+      params: {'miny': null, 'maxy': null, 'buffer': 5},
 
       cmd: function(input) {
         if (input.length <= 1) return;
 
-        var topics = [];
-        var buffer = 5;
+        var topics;
+
+        if (this.param._t_plot) {
+          topics = this.param._topics;
+        } else {
+          topics = []
+        }
 
         for (var i = 1; i < input.length; i++) {
-          topics[i-1] = {
+          var topic = {
             name: input[i],
-            color: colors[i % colors.length],
+            color: colors[topics.length % colors.length],
             times: [],
             values: [],
           }
+
+          !function(topic) {
+            topic.ref = ros.subscribe(topic.name, function(data) {
+              topic.times.push(ros.time());
+              topic.values.push(data);
+            })
+          }(topic);
+
+          topics.push(topic);
         }
 
+        if (this.param._t_plot) return;
+
         this.title(topics[0].name);
+        this.paramize(cmds.plot.params);
+
+        this.param._t_plot = true;
+        this.param._topics = topics;
 
         var draw = function(ctx) {
           var off = 3;
@@ -166,7 +205,7 @@ var ROSPlot = (function() {
           var max_value = -Infinity;
           var min_value = +Infinity;
           var max_time = ros.time();
-          var min_time = max_time - (buffer)*1000;
+          var min_time = max_time - (this.param.buffer)*1000;
 
           var x, y;
 
@@ -198,6 +237,14 @@ var ROSPlot = (function() {
             }
           }
 
+          if (this.param.maxy != null) {
+            max_value = this.param.maxy;
+          }
+
+          if (this.param.miny != null) {
+            min_value = this.param.miny;
+          }
+
           if (min_value == max_value) {
             max_value += 0.00001;
             min_value -= 0.00001;
@@ -217,8 +264,8 @@ var ROSPlot = (function() {
           ctx.moveTo(max_x-off, y);
           ctx.lineTo(max_x+off, y);
 
-          for (var i = 0; i < buffer; i++) {
-            x = ~~((max_x-min_x) * (i/buffer) + min_x);
+          for (var i = 0; i < this.param.buffer; i++) {
+            x = ~~((max_x-min_x) * (i/this.param.buffer) + min_x);
             ctx.moveTo(x, max_y-off);
             ctx.lineTo(x, max_y+off);
           }
@@ -281,23 +328,16 @@ var ROSPlot = (function() {
         this.plot(draw);
         this.animate(draw);
 
-        for (var i = 0; i < topics.length; i++) {
-          var ref;
-
-          (function(topic) {
-            ref = ros.subscribe(topic.name, function(data) {
-              topic.times.push(ros.time());
-              topic.values.push(data);
-            })
-          })(topics[i]);
-
-          this.topics.push(ref);
-        }
+        this.defer(function() {
+          for (var i = 0; i < topics.length; i++) {
+            ros.unsubscribe(topics[i].ref);
+          }
+        });
       }
     },
 
     plot2: {
-      help: 'plots one param against another',
+      help: 'plots one field against another',
       cmd: function() {}
     },
 
@@ -310,6 +350,7 @@ var ROSPlot = (function() {
         var image = new Image();
 
         this.title(topic);
+        this.paramize(cmds.watch.params);
 
         this.plot(function(ctx) {
           image.src = ros.mjpeg(topic, this.width, this.height);
@@ -336,7 +377,7 @@ var ROSPlot = (function() {
     this.height = canvas.height;
     this.title = title || function() {};
 
-    this.topics = [];
+    this._defered = [];
 
     this.command('help');
   }
@@ -368,12 +409,17 @@ var ROSPlot = (function() {
     }
   }
 
+  ROSPlot.prototype.defer = function(fn) {
+    this._defered.push(fn);
+  }
+
   ROSPlot.prototype.clean = function() {
-    for (var i=0; i < this.topics.length; i++) {
-      ros.unsubscribe(this.topics[i]);
+    for (var i=0; i < this._defered.length; i++) {
+      this._defd = this._defered[i];
+      this._defd();
     }
 
-    this.topics = [];
+    this._defered = [];
 
     delete this._plot;
     delete this._cmd;
@@ -383,6 +429,13 @@ var ROSPlot = (function() {
   ROSPlot.prototype.plot = function(plot) {
     this.clean();
     this._plot = plot;
+  }
+
+  ROSPlot.prototype.paramize = function(param) {
+    this.param = {};
+    for (var k in param) {
+      this.param[k] = param[k];
+    }
   }
 
   ROSPlot.prototype.animate = function(plot) {
