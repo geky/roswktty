@@ -156,7 +156,7 @@ var ROSPlot = (function() {
 
     plot: {
       help: 'plots fields against time',
-      params: {'miny': null, 'maxy': null, 'buffer': 5},
+      params: {lines: true, zeroes: true, miny: null, maxy: null, buffer: 5},
 
       cmd: function(input) {
         if (input.length <= 1) return;
@@ -270,6 +270,13 @@ var ROSPlot = (function() {
             ctx.lineTo(x, max_y+off);
           }
 
+          if (this.param.zeroes && max_value > 0 && min_value < 0) {
+            var yy = (-min_value) / (max_value-min_value);
+            yy = ((1-yy)*(max_y - min_y)) + min_y;
+            ctx.moveTo(max_x+off, yy);
+            ctx.lineTo(min_x, yy);
+          }
+
           ctx.stroke();
 
           x = (max_value-min_value)/2 + min_value;
@@ -284,6 +291,7 @@ var ROSPlot = (function() {
 
           for (var i = 0; i < topics.length; i++) {
             ctx.strokeStyle = topics[i].color;
+            ctx.fillStyle = topics[i].color;
             ctx.beginPath();
 
             var prev_time = min_time;
@@ -310,16 +318,19 @@ var ROSPlot = (function() {
               x = (t*(max_x - min_x))+min_x;
               y = ((1-v)*(max_y - min_y))+min_y;
 
-              if (ii == 0) {
-                ctx.moveTo(x, y);
+              if (this.param.lines) {
+                if (ii == 0) {
+                  ctx.moveTo(x, y);
+                } else {
+                  ctx.lineTo(x, y);
+                }
               } else {
-                ctx.lineTo(x, y);
+                ctx.fillRect(x, y, 2, 2);
               }
             }
 
             ctx.stroke();
             
-            ctx.fillStyle = topics[i].color;
             ctx.font = '12px monospace';
             ctx.fillText(topics[i].name, min_x, (i+1)*12 + min_y);
           }

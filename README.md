@@ -1,6 +1,6 @@
-# ros_tty_js
+# ROS Web Kit
 
-ROS and a Terminal in your browser.
+ROS plotting, image streaming, and a Terminal in your browser.
 
 Uses node.js, socket.io and of course, ROS.
 
