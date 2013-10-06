@@ -15,13 +15,14 @@ ROSManager = (function() {
     this.topics = []
   }
 
-  ROSManager.prototype.mjpeg = function(topic, width, height) {
+  ROSManager.prototype.mjpeg = function(topic, width, height, quality) {
     var url = 'http://' + window.location.hostname 
     url += ':' + mjpeg_port + '/stream';
 
     if (topic) url += '?topic=' + topic;
     if (width) url += '?width=' + width;
     if (height) url += '?height=' + height;
+    if (quality) url += '?quality=' + quality;
     return url;
   }
 
@@ -109,6 +110,10 @@ var ROSPlot = (function() {
                  "#ef2929", "#8ae234", "#fce94f", "#729fcf", 
                  "#ad7fa8", "#34e2e2", "#eeeeec" ];
 
+  var stringize = function(value) {
+    return ((value>0 ? ' ' : '') + value).substring(0, 5);
+  }
+
   var cmds = {
     help: {
       help: 'shows basic commands',
@@ -143,9 +148,9 @@ var ROSPlot = (function() {
             var cmd = cmds[input[1]];
             ctx.fillText(cmd.help, 12, y += 12);
 
-            if (cmd.params) {
+            if (cmd.param) {
               ctx.fillText('Params: ', 0, y += 24);
-              for (var param in cmd.params) {
+              for (var param in cmd.param) {
                 ctx.fillText(param, 12, y += 12);
               }
             }
@@ -161,6 +166,7 @@ var ROSPlot = (function() {
         if (input.length <= 2) return;
 
         this.param[input[1]] = eval(input[2]);
+        this.render();
       }
     },
 
@@ -241,13 +247,18 @@ var ROSPlot = (function() {
 
     plot: {
       help: 'plots fields against time',
-      params: {lines: true, zero: true, miny: null, maxy: null, buffer: 5},
+
+      param: {
+        lines: true, 
+        zero: true, 
+        miny: null, maxy: null, 
+        buffer: 5
+      },
 
       cmd: function(input) {
         if (input.length <= 1) return;
 
         var topics;
-
         if (this.param._t_plot) {
           topics = this.param._topics;
         } else {
@@ -275,17 +286,16 @@ var ROSPlot = (function() {
         if (this.param._t_plot) return;
 
         this.title(topics[0].name);
-        this.paramize(cmds.plot.params);
+        this.paramize(cmds.plot.param);
 
         this.param._t_plot = true;
         this.param._topics = topics;
 
         this.plot(function(ctx) {
-          var off = 3;
           var min_y = 1;
           var max_y = this.height - 1;
           var min_x = 1;
-          var max_x = this.width - 27;
+          var max_x = this.width - 33;
 
           var max_value = -Infinity;
           var min_value = +Infinity;
@@ -310,14 +320,12 @@ var ROSPlot = (function() {
             } 
 
             for (var ii = 0; ii < topic.values.length; ii++) {
-              var value = topic.values[ii];
-
-              if (value > max_value) {
-                max_value = value;
+              if (topic.values[ii] > max_value) {
+                max_value = topic.values[ii];
               }
 
-              if (value < min_value) {
-                min_value = value;
+              if (topic.values[ii] < min_value) {
+                min_value = topic.values[ii];
               }
             }
           }
@@ -338,41 +346,38 @@ var ROSPlot = (function() {
           ctx.lineWidth = 2;
           ctx.strokeStyle = '#555';
           ctx.beginPath();
-          ctx.moveTo(max_x, min_y-off);
-          ctx.lineTo(max_x, max_y+off);
-          ctx.moveTo(min_x-off, max_y);
-          ctx.lineTo(max_x+off, max_y);
+          ctx.moveTo(max_x, min_y-3);
+          ctx.lineTo(max_x, max_y+3);
+          ctx.moveTo(min_x-3, max_y);
+          ctx.lineTo(max_x+3, max_y);
 
           y = ~~((max_y-min_y)/2 + min_y);
-          ctx.moveTo(max_x-off, min_y);
-          ctx.lineTo(max_x+off, min_y);
-          ctx.moveTo(max_x-off, y);
-          ctx.lineTo(max_x+off, y);
+          ctx.moveTo(max_x-3, min_y);
+          ctx.lineTo(max_x+3, min_y);
+          ctx.moveTo(max_x-3, y);
+          ctx.lineTo(max_x+3, y);
 
           for (var i = 0; i < this.param.buffer; i++) {
             x = ~~((max_x-min_x) * (i/this.param.buffer) + min_x);
-            ctx.moveTo(x, max_y-off);
-            ctx.lineTo(x, max_y+off);
+            ctx.moveTo(x, max_y-3);
+            ctx.lineTo(x, max_y+3);
           }
 
-          if (this.param.zeroes && max_value > 0 && min_value < 0) {
+          if (this.param.zero && max_value > 0 && min_value < 0) {
             var yy = (-min_value) / (max_value-min_value);
             yy = ((1-yy)*(max_y - min_y)) + min_y;
-            ctx.moveTo(max_x+off, yy);
-            ctx.lineTo(min_x, yy);
+            ctx.moveTo(max_x+3, ~~yy);
+            ctx.lineTo(min_x, ~~yy);
           }
 
           ctx.stroke();
 
-          x = (max_value-min_value)/2 + min_value;
+          var value = (max_value-min_value)/2 + min_value;
           ctx.fillStyle = '#f0f0f0';
           ctx.font = '9px monospace';
-          ctx.fillText(String(min_value).substring(0,4), 
-                       max_x+2*off, max_y);
-          ctx.fillText(String(x).substring(0,4), 
-                       max_x+2*off, y+off);
-          ctx.fillText(String(max_value).substring(0,4), 
-                       max_x+2*off, min_y+2*off);
+          ctx.fillText(stringize(min_value), max_x+6, max_y);
+          ctx.fillText(stringize(    value), max_x+6, y+3);
+          ctx.fillText(stringize(max_value), max_x+6, min_y+6);
 
           for (var i = 0; i < topics.length; i++) {
             ctx.strokeStyle = topics[i].color;
@@ -410,7 +415,7 @@ var ROSPlot = (function() {
                   ctx.lineTo(x, y);
                 }
               } else {
-                ctx.fillRect(x, y, 2, 2);
+                ctx.fillRect(~~x, ~~y, 2, 2);
               }
             }
 
@@ -431,11 +436,231 @@ var ROSPlot = (function() {
 
     plot2: {
       help: 'plots one field against another',
-      cmd: function() {}
+
+      param: {
+        lines: true, 
+        zero: true, 
+        miny: null, maxy: null, 
+        minx: null, maxx: null, 
+        buffer: 5
+      },
+
+      cmd: function(input) {
+        if (input.length <= 2) return;
+
+        var topics;
+        if (this.param._t_plot2) {
+          topics = this.param._topics;
+        } else {
+          topics = []
+        }
+
+        for (var i = 1; i < input.length; i+=2) {
+          var pair = {
+            xname: input[i],
+            yname: input[i+1],
+            color: colors[topics.length % colors.length],
+            times: [],
+            xs: [],
+            ys: []
+          }
+
+          var sub = function(name, times, mine, other) {
+            return ros.subscribe(name, function(data) {
+              if (mine.length < other.length) {
+                times[mine.length-1] = ros.time();
+                mine.push(data);
+              } else if (mine.length > other.length) {
+                times[mine.length-1] = ros.time();
+                mine[mine.length-1] = data;
+              } else {
+                times.push(ros.time());
+                mine.push(data);
+              }
+            });
+          }
+
+          pair.xref = sub(pair.xname, pair.times, pair.xs, pair.ys);
+          pair.yref = sub(pair.yname, pair.times, pair.ys, pair.xs);
+          topics.push(pair);
+        }
+
+        if (this.param._t_plot2) return;
+
+        this.title(topics[0].xname);
+        this.paramize(cmds.plot2.param);
+
+        this.param._t_plot2 = true;
+        this.param._topics = topics;
+
+        this.plot(function(ctx) {
+          var min_y = 1;
+          var max_y = this.height - 10;
+          var min_x = 33;
+          var max_x = this.width - 1;
+
+          var max_vx = -Infinity;
+          var min_vx = +Infinity;
+          var max_vy = -Infinity;
+          var min_vy = +Infinity;
+
+          var min_time = ros.time() - (this.param.buffer)*1000;
+
+          var x, y;
+
+          for (var i = 0; i < topics.length; i++) {
+            var pair = topics[i];
+
+            while (pair.times.length > 0 && 
+                   pair.times[0] < min_time-1000) {
+              pair.times.shift();
+              pair.xs.shift();
+              pair.ys.shift();
+            }
+
+            for (var ii = 0; ii < pair.times.length; ii++) {
+              if (pair.xs[ii] > max_vx) {
+                max_vx = pair.xs[ii];
+              }
+
+              if (pair.xs[ii] < min_vx) {
+                min_vx = pair.xs[ii];
+              }
+
+              if (pair.ys[ii] > max_vy) {
+                max_vy = pair.ys[ii];
+              }
+
+              if (pair.ys[ii] < min_vy) {
+                min_vy = pair.ys[ii];
+              }
+            }
+          }
+
+          if (this.param.maxx != null) {
+            max_vx = this.param.maxx;
+          }
+
+          if (this.param.minx != null) {
+            min_vx = this.param.minx;
+          }
+
+          if (this.param.maxy != null) {
+            max_vy = this.param.maxy;
+          }
+
+          if (this.param.miny != null) {
+            min_vy = this.param.miny;
+          }
+
+          if (min_vx == max_vx) {
+            max_vx += 0.00001;
+            min_vx -= 0.00001;
+          }
+
+          if (min_vy == max_vy) {
+            max_vy += 0.00001;
+            min_vy -= 0.00001;
+          }
+
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = '#555';
+          ctx.beginPath();
+          ctx.moveTo(min_x, min_y-3);
+          ctx.lineTo(min_x, max_y+3);
+          ctx.moveTo(min_x-3, max_y);
+          ctx.lineTo(max_x+3, max_y);
+
+          x = ~~((max_x-min_x)/2 + min_x);
+          ctx.moveTo(max_x, max_y-3);
+          ctx.lineTo(max_x, max_y+3);
+          ctx.moveTo(x, max_y-3);
+          ctx.lineTo(x, max_y+3);
+
+          y = ~~((max_y-min_y)/2 + min_y);
+          ctx.moveTo(min_x-3, min_y);
+          ctx.lineTo(min_x+3, min_y);
+          ctx.moveTo(min_x-3, y);
+          ctx.lineTo(min_x+3, y);
+
+          if (this.param.zero && max_vx > 0 && min_vx < 0) {
+            var xx = (-min_vx) / (max_vx-min_vx);
+            xx = ((1-xx)*(max_x - min_x)) + min_x;
+            ctx.moveTo(~~xx, max_y+3);
+            ctx.lineTo(~~xx, min_y);
+          }
+
+          if (this.param.zero && max_vy > 0 && min_vy < 0) {
+            var yy = (-min_vy) / (max_vy-min_vy);
+            yy = ((1-yy)*(max_y - min_y)) + min_y;
+            ctx.moveTo(min_x-3, ~~yy);
+            ctx.lineTo(max_x, ~~yy);
+          }
+
+          ctx.stroke();
+
+          var valuex = (max_vx-min_vx)/2 + min_vx;
+          var valuey = (max_vy-min_vy)/2 + min_vy;
+          ctx.fillStyle = '#f0f0f0';
+          ctx.font = '9px monospace';
+
+          ctx.fillText(stringize(min_vx),    min_x, max_y+10);
+          ctx.fillText(stringize(valuex),     x-15, max_y+10);
+          ctx.fillText(stringize(max_vx), max_x-24, max_y+10);
+
+          ctx.fillText(stringize(min_vy), min_x-33, max_y);
+          ctx.fillText(stringize(valuey), min_x-33, y+3);
+          ctx.fillText(stringize(max_vy), min_x-33, min_y+6);
+
+          for (var i = 0; i < topics.length; i++) {
+            ctx.strokeStyle = topics[i].color;
+            ctx.fillStyle = topics[i].color;
+            ctx.beginPath();
+
+            for (var ii = 0; ii < topics[i].times.length; ii++) {
+              var vx = topics[i].xs[ii];
+              var vy = topics[i].ys[ii];
+
+              vx = (vx-min_vx) / (max_vx-min_vx);
+              vy = (vy-min_vy) / (max_vy-min_vy);
+
+              x = (vx*(max_x - min_x))+min_x;
+              y = ((1-vy)*(max_y - min_y))+min_y;
+
+              if (this.param.lines) {
+                if (ii == 0) {
+                  ctx.moveTo(x, y);
+                } else {
+                  ctx.lineTo(x, y);
+                }
+              } else {
+                ctx.fillRect(~~x, ~~y, 2, 2);
+              }
+            }
+
+            ctx.stroke();
+            
+            ctx.font = '12px monospace';
+            ctx.fillText(topics[i].xname, min_x+6, i*24+12 + min_y);
+            ctx.fillText(topics[i].yname, min_x+6, i*24+24 + min_y);
+          }
+        }, true);
+
+        this.defer(function() {
+          for (var i = 0; i < topics.length; i++) {
+            ros.unsubscribe(topics[i].xref);
+            ros.unsubscribe(topics[i].yref);
+          }
+        });
+      }
     },
 
     watch: {
       help: 'renders image in realtime',
+
+      param: {
+        quality: 90,
+      },
 
       cmd: function(input) {
         if (input.length <= 1) return;
@@ -443,10 +668,11 @@ var ROSPlot = (function() {
         var image = new Image();
 
         this.title(topic);
-        this.paramize(cmds.watch.params);
+        this.paramize(cmds.watch.param);
 
         this.plot(function(ctx) {
-          image.src = ros.mjpeg(topic, this.width, this.height);
+          image.src = ros.mjpeg(topic, this.width, this.height,
+                                this.param.quality);
         });
 
         this.animate(function(ctx) {
