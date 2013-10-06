@@ -136,6 +136,9 @@ var ROSPlot = (function() {
 
             ctx.fillText('Fields can be specified like so:', 0, y += 24);
             ctx.fillText('/name/space/topic.field', 12, y += 12);
+
+            ctx.fillText('Params can be set with the set command:', 0, y += 24);
+            ctx.fillText('set param value', 12, y += 12);
           });
         } else {
           this.plot(function(ctx) {
@@ -151,7 +154,7 @@ var ROSPlot = (function() {
             if (cmd.param) {
               ctx.fillText('Params: ', 0, y += 24);
               for (var param in cmd.param) {
-                ctx.fillText(param, 12, y += 12);
+                ctx.fillText(param + ' - ' + cmd.param[param], 12, y += 12);
               }
             }
           });
@@ -249,10 +252,11 @@ var ROSPlot = (function() {
       help: 'plots fields against time',
 
       param: {
-        lines: true, 
-        zero: true, 
-        miny: null, maxy: null, 
-        buffer: 5
+        lines: 'display lines or points',
+        zero: 'display zero line', 
+        miny: 'minimum y value',
+        maxy: 'maximum y value', 
+        buffer: 'size of buffer in seconds'
       },
 
       cmd: function(input) {
@@ -286,7 +290,12 @@ var ROSPlot = (function() {
         if (this.param._t_plot) return;
 
         this.title(topics[0].name);
-        this.paramize(cmds.plot.param);
+        this.paramize({
+          lines: true, 
+          zero: true, 
+          miny: null, maxy: null, 
+          buffer: 5
+        });
 
         this.param._t_plot = true;
         this.param._topics = topics;
@@ -438,11 +447,13 @@ var ROSPlot = (function() {
       help: 'plots one field against another',
 
       param: {
-        lines: true, 
-        zero: true, 
-        miny: null, maxy: null, 
-        minx: null, maxx: null, 
-        buffer: 5
+        lines: 'display lines or points',
+        zero: 'display zero lines', 
+        miny: 'minimum y value',
+        maxy: 'maximum y value', 
+        minx: 'minimum x value',
+        maxx: 'maximum x value', 
+        buffer: 'size of buffer in seconds'
       },
 
       cmd: function(input) {
@@ -488,7 +499,13 @@ var ROSPlot = (function() {
         if (this.param._t_plot2) return;
 
         this.title(topics[0].xname);
-        this.paramize(cmds.plot2.param);
+        this.paramize({
+          lines: true, 
+          zero: true, 
+          miny: null, maxy: null, 
+          minx: null, maxx: null, 
+          buffer: 5
+        });
 
         this.param._t_plot2 = true;
         this.param._topics = topics;
@@ -585,7 +602,7 @@ var ROSPlot = (function() {
 
           if (this.param.zero && max_vx > 0 && min_vx < 0) {
             var xx = (-min_vx) / (max_vx-min_vx);
-            xx = ((1-xx)*(max_x - min_x)) + min_x;
+            xx = (xx*(max_x - min_x)) + min_x;
             ctx.moveTo(~~xx, max_y+3);
             ctx.lineTo(~~xx, min_y);
           }
@@ -659,7 +676,7 @@ var ROSPlot = (function() {
       help: 'renders image in realtime',
 
       param: {
-        quality: 90,
+        quality: 'quality of compression from 1 to 100',
       },
 
       cmd: function(input) {
@@ -668,7 +685,7 @@ var ROSPlot = (function() {
         var image = new Image();
 
         this.title(topic);
-        this.paramize(cmds.watch.param);
+        this.paramize();
 
         this.plot(function(ctx) {
           image.src = ros.mjpeg(topic, this.width, this.height,
@@ -772,10 +789,7 @@ var ROSPlot = (function() {
   }
         
   ROSPlot.prototype.paramize = function(param) {
-    this.param = {};
-    for (var k in param) {
-      this.param[k] = param[k];
-    }
+    this.param = param || {};
   }
 
   return ROSPlot;
