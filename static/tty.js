@@ -916,7 +916,7 @@ function Plot(socket) {
   canvas.className = 'terminal';
 
   rp = new ROSPlot(canvas, function(value) { 
-    title.innerHTML = value;
+    title.innerHTML = value || '';
   });
 
   form = document.createElement('form');

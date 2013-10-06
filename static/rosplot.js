@@ -85,6 +85,10 @@ ROSManager = (function() {
     }
   }
 
+  ROSManager.prototype.gettopics = function(cb) {
+    this.ros.getTopics(cb);
+  }
+
   return ROSManager;
 })();
 
@@ -93,18 +97,24 @@ var ros = new ROSManager();
 
 var ROSPlot = (function() {
 
-  var colors = ["#cc0000", "#4e9a06", "#c4a000", "#3465a4", 
-                "#75507b", "#06989a", "#d3d7cf", "#555753", 
-                "#ef2929", "#8ae234", "#fce94f", "#729fcf", 
-                "#ad7fa8", "#34e2e2", "#eeeeec"];
+  var requestFrame = ( window.requestAnimationFrame       ||
+                       window.webkitRequestAnimationFrame ||
+                       window.mozRequestAnimationFrame    ||
+                       window.oRequestAnimationFrame      ||
+                       window.msRequestAnimationFrame     ||
+                       function(callback) { setInterval(callback, 100); } );
 
+  var colors = [ "#cc0000", "#4e9a06", "#c4a000", "#3465a4", 
+                 "#75507b", "#06989a", "#d3d7cf", "#555753", 
+                 "#ef2929", "#8ae234", "#fce94f", "#729fcf", 
+                 "#ad7fa8", "#34e2e2", "#eeeeec" ];
 
   var cmds = {
     help: {
       help: 'shows basic commands',
 
       cmd: function(input) {
-        this.title('');
+        this.title();
         this.paramize();
 
         if (input.length == 1) {
@@ -154,9 +164,84 @@ var ROSPlot = (function() {
       }
     },
 
+    topics: {
+      help: 'lists available topics',
+
+      cmd: function() {
+        this.title();
+        this.paramize();
+
+        var self = this;
+        var topics = []
+
+        this.plot(function(ctx) {
+          ctx.fillStyle = '#f0f0f0'
+          ctx.font = '12px monospace';
+
+          var y = 12;
+          ctx.fillText('Topics:', 0, y);
+
+          for (var i = 0; i < topics.length; i++) {
+            ctx.fillText(topics[i], 12, y += 12);
+          }
+        });
+
+        ros.gettopics(function(lookup) {
+          topics = lookup;
+          self.render();
+        });
+      }
+    },
+
+    echo: {
+      help: 'echo raw topic data',
+
+      cmd: function(input) {
+        if (input.length <= 1) return;
+        var topic = input[1];
+        var ref;
+        var message = {};
+
+        this.title(topic);
+        this.paramize();
+
+        ref = ros.subscribe(topic, function (data) {
+          message = data;
+        });
+
+        this.plot(function(ctx) {
+          ctx.fillStyle = '#f0f0f0'
+          ctx.font = '12px monospace';
+
+          var y = 0;
+
+          var echo = function(x, name, data) {
+            if (data instanceof Array) {
+              ctx.fillText(name + ': [' + data.join(', ') + ']', x, y += 12);
+             
+            } else if (data instanceof Object && !(data instanceof Array)) {
+              ctx.fillText(name + ':', x, y += 12);
+
+              for (var k in data) {
+                echo(x + 12, k, data[k]);
+              }
+            } else {
+              ctx.fillText(name + ': ' + data, x, y += 12);
+            }
+          }
+
+          echo(0, topic, message);
+        }, true);
+
+        this.defer(function() {
+          ros.unsubscribe(ref);
+        });
+      }
+    },
+
     plot: {
       help: 'plots fields against time',
-      params: {lines: true, zeroes: true, miny: null, maxy: null, buffer: 5},
+      params: {lines: true, zero: true, miny: null, maxy: null, buffer: 5},
 
       cmd: function(input) {
         if (input.length <= 1) return;
@@ -195,7 +280,7 @@ var ROSPlot = (function() {
         this.param._t_plot = true;
         this.param._topics = topics;
 
-        var draw = function(ctx) {
+        this.plot(function(ctx) {
           var off = 3;
           var min_y = 1;
           var max_y = this.height - 1;
@@ -334,10 +419,7 @@ var ROSPlot = (function() {
             ctx.font = '12px monospace';
             ctx.fillText(topics[i].name, min_x, (i+1)*12 + min_y);
           }
-        }
-
-        this.plot(draw);
-        this.animate(draw);
+        }, true);
 
         this.defer(function() {
           for (var i = 0; i < topics.length; i++) {
@@ -437,45 +519,37 @@ var ROSPlot = (function() {
     delete this._animate;
   }
 
-  ROSPlot.prototype.plot = function(plot) {
+  ROSPlot.prototype.plot = function(plot, animate) {
     this.clean();
     this._plot = plot;
+
+    if (animate) {
+      this.animate(plot);
+    }
   }
 
+  ROSPlot.prototype.animate = function(animate) {
+    var self = this;
+    this._animate = animate;
+
+    var frame = function() {
+      if (self._animate) {
+        // Clear the canvas
+        self.canvas.width = self.canvas.width;
+
+        self._animate(self.context);
+        requestFrame(frame);
+      }
+    }
+
+    requestFrame(frame);
+  }
+        
   ROSPlot.prototype.paramize = function(param) {
     this.param = {};
     for (var k in param) {
       this.param[k] = param[k];
     }
-  }
-
-  ROSPlot.prototype.animate = function(plot) {
-    this._animate = plot;
-    var self = this;
-
-    var requestAnim = (
-      window.requestAnimationFrame ||
-      window.webkitRequestAnimationFrame ||
-      window.mozRequestAnimationFrame ||
-      window.oRequestAnimationFrame ||
-      window.msRequestAnimationFrame ||
-      function(callback) {
-        setInterval(callback, 100);
-      }
-    );
-
-    var draw = function() {
-      if (self._animate) {
-        // Clear the canvas
-        self.canvas.width = self.canvas.width;
-
-        // Call ourselves in through the closure
-        self._animate(self.context);
-        requestAnim(draw);
-      }
-    }
-
-    requestAnim(draw);
   }
 
   return ROSPlot;
