@@ -73,6 +73,31 @@ ROSManager = (function() {
     return ref;
   }
 
+  ROSManager.prototype.subdata = function(name, cb, add, rm) {
+    var self = this;
+
+    var ref = this.subscribe(name, function(data) {
+      if (data instanceof Array) {
+        for (var i = 0; i < data.length; i++) {
+          add(ref.name + ref.field + '[' + i + ']');
+        }
+
+        rm();
+      } else if (data instanceof Object) {
+        for (var key in data) {
+          add(ref.name + ref.field + '.' + key);
+        }
+
+        rm();
+      } else {
+        cb(data);
+        ref.cb = cb;
+      }
+    });
+
+    return ref;
+  }
+
   ROSManager.prototype.unsubscribe = function(ref) {
     var topic = this.topics[ref.name];
 
@@ -97,7 +122,7 @@ var ros = new ROSManager();
 
 
 var ROSPlot = (function() {
-
+  // A few helpful things
   var requestFrame = ( window.requestAnimationFrame       ||
                        window.webkitRequestAnimationFrame ||
                        window.mozRequestAnimationFrame    ||
@@ -114,6 +139,7 @@ var ROSPlot = (function() {
     return ((value>0 ? ' ' : '') + value).substring(0, 5);
   }
 
+  // The actual commands that can be run
   var cmds = {
     help: {
       help: 'shows basic commands',
@@ -159,6 +185,16 @@ var ROSPlot = (function() {
             }
           });
         }
+      }
+    },
+
+    clear: {
+      help: 'clears any plot',
+
+      cmd: function() {
+        this.title();
+        this.paramize();
+        this.plot(function(){});
       }
     },
 
@@ -270,6 +306,7 @@ var ROSPlot = (function() {
         }
 
         for (var i = 1; i < input.length; i++) {
+          var self = this;
           var topic = {
             name: input[i],
             color: colors[topics.length % colors.length],
@@ -278,10 +315,18 @@ var ROSPlot = (function() {
           }
 
           !function(topic) {
-            topic.ref = ros.subscribe(topic.name, function(data) {
+            topic.ref = ros.subdata(topic.name, function(data) {
               topic.times.push(ros.time());
               topic.values.push(data);
-            })
+
+            }, function(newname) {
+              console.log(newname);
+              self.command('plot ' + newname);
+
+            }, function() {
+              topics.splice(topics.indexOf(topic), 1);
+              ros.unsubscribe(topic.ref);
+            });
           }(topic);
 
           topics.push(topic);
@@ -672,6 +717,82 @@ var ROSPlot = (function() {
       }
     },
 
+    show: {
+      help: 'renders arrays of data',
+
+      param: {
+        max: 'maximum data value',
+        mina: 'minimum angle value',
+        maxa: 'maximum angle value',
+        buffer: 'size of max buffer in seconds',
+        radial: 'show data radially',
+      },
+
+      cmd: function(input) {
+        if (input.length <= 1) return;
+
+        var max = 0;
+        var topics;
+
+        if (this.param._t_show) {
+          topics = this.param._topics;
+        } else {
+          topics = []
+        }
+
+        for (var i = 1; i < input.length; i++) {
+          var topic = {
+            name: input[i],
+            color: colors[topics.length % colors.length],
+            values: [],
+            lasttime: 0,
+          }
+
+          !function(topic) {
+            topic.ref = ros.subscribe(topic.name, function(data) {
+              topic.values = data;
+            })
+          }(topic);
+
+          topics.push(topic);
+        }
+
+        if (this.param._t_show) return;
+
+        this.title(topics[0].name);
+        this.paramize({
+          max: null,
+          mina: 0, maxa: Math.PI,
+          buffer: 5,
+          radial: false,
+        });
+
+        this.param._t_show = true;
+        this.param._topics = topics;
+
+        this.plot(function(ctx) {
+          var max = -Infinity;
+
+          for (var i = 0; i < topics.length; i++) {
+            for (var ii = 0; ii < topics[i].values.length; ii++) {
+              if (topics[i].values[ii] > max) {
+                max = topics[i].values[ii];
+              }
+            }
+          }
+              
+        }, true);
+
+        this.defer(function() {
+          for (var i = 0; i < topics.length; i++) {
+            ros.unsubscribe(topics[i].ref);
+          }
+        });
+      }
+    },
+        
+        
+
     watch: {
       help: 'renders image in realtime',
 
@@ -706,6 +827,7 @@ var ROSPlot = (function() {
   }
 
 
+  // The rosplot type
   function ROSPlot(canvas, title) {
     this.canvas = canvas;
     this.context = canvas.getContext('2d');

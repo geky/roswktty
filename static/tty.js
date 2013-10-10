@@ -921,12 +921,10 @@ function Plot(socket) {
 
   form = document.createElement('form');
   form.onsubmit = function(ev) {
-    try {
-      rp.command(ev.target[0].value);
-      ev.target[0].value = '';
-    } catch (err) {
-      console.log(err);
-    }
+    ev.preventDefault();
+
+    rp.command(ev.target[0].value);
+    ev.target[0].value = '';
 
     return false;
   }
