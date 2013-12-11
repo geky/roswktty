@@ -1,22 +1,31 @@
 /**
- * tty.js
+ * ROSPlot Manager
  * Copyright (c) 2013-2014, Christopher Haster (MIT License)
  */
 
 ROSManager = (function() {
-  var bridge_port = 9001;
-  var mjpeg_port = 9002;
+  var DEFAULT_PORT = ~~location.port;
 
-  function ROSManager() {
+  var COLORS = [ "#cc0000", "#4e9a06", "#c4a000", "#3465a4", 
+                 "#75507b", "#06989a", "#d3d7cf", "#555753", 
+                 "#ef2929", "#8ae234", "#fce94f", "#729fcf", 
+                 "#ad7fa8", "#34e2e2", "#eeeeec" ];
+
+
+  function ROSManager(bridgeport, mjpegport) {
+    this.bridgeport = bridgeport || (DEFAULT_PORT+1)
+    this.mjpegport = mjpegport || (DEFAULT_PORT+2)
+
     this.ros = new ROSLIB.Ros({
-      url: 'ws://' + window.location.hostname + ':' + bridge_port
+      url: 'ws://' + location.hostname + ':' + this.bridgeport
     });
 
     this.topics = []
+    this.colors = COLORS
   }
 
   ROSManager.prototype.mjpeg = function(topic, width, height, quality) {
-    var url = 'http://' + window.location.hostname 
+    var url = 'http://' + location.hostname 
     url += ':' + mjpeg_port + '/stream';
 
     if (topic) url += '?topic=' + topic;
@@ -28,6 +37,10 @@ ROSManager = (function() {
 
   ROSManager.prototype.time = function() {
     return new Date().getTime();
+  }
+
+  ROSManager.prototype.log = function(output) {
+    console.log(output)
   }
 
   ROSManager.prototype.subscribe = function(name, cb) {
@@ -62,7 +75,7 @@ ROSManager = (function() {
       refs: [ref],
     }
 
-    console.log('subscribed: ' + ref.name);
+    this.log('subscribed: ' + ref.name);
     topic.topic.subscribe(function(data) {
       for (var i = 0; i < topic.refs.length; i++) {
         topic.refs[i].cb(topic.refs[i].parse(data));
@@ -105,7 +118,7 @@ ROSManager = (function() {
     topic.refs.splice(ind, 1);
 
     if (topic.refs.length == 0) {
-      console.log('unsubscribed: ' + ref.name);
+      this.log('unsubscribed: ' + ref.name);
       topic.topic.unsubscribe();
       delete this.topics[ref.name];
     }
@@ -117,8 +130,6 @@ ROSManager = (function() {
 
   return ROSManager;
 })();
-
-var ros = new ROSManager();
 
 
 var ROSPlot = (function() {

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="http://cdn.robotwebtools.org/EventEmitter2/current/eventemitter2.min.js"></script>
+    <script src="http://cdn.robotwebtools.org/roslibjs/current/roslib.min.js"></script>
+    <script src="http://cdn.robotwebtools.org/mjpegcanvasjs/current/mjpegcanvas.min.js"></script>
+
+    <script src="rosman.js"></script>
+    <script src="rosplot.js"></script>
+    <script src="roswatch.js"></script>
+    <script src="rosecho.js"></script>
+    <script src="rosrrange.js"></script>
+
+    <script>
+        var plot
+
+        function init() {
+            var ros = new ROSManager(9090)
+            plot = new ROSRRange(ros, "/scan.ranges")
+            var canvas = document.getElementById("plot")
+            var ctx = canvas.getContext("2d")
+            ctx.height = canvas.height
+            ctx.width = canvas.width
+
+            function draw() {
+                canvas.width = canvas.width
+                plot.render(ctx)
+                setTimeout(draw, 10)
+            }
+
+            draw()
+        }
+    </script>
+
+    <style>
+        canvas {
+            background-color: black;
+        }
+    </style>
+</head>
+<body onload="init();">
+    <canvas id="plot" width=1000 height=500>...</canvas>
+</body>
+</html>
